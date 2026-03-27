@@ -1,4 +1,3 @@
-import "./env.js";
 
 import express from "express";
 import eventosRoutes from "./routes/eventos.js";
