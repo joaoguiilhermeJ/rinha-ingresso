@@ -1,188 +1,96 @@
-# Rinha de Ingressos
+# I Rinha de Dev: O Caos do Ingresso
 
-API para reserva de ingressos de eventos, desenvolvida em Node.js com Express e PostgreSQL (Neon), otimizada para alta concorrência.
+Bem-vindos à Rinha de Dev (uma cópia descarada do rinha de backend https://github.com/zanfranceschi/rinha-de-backend-2025)! 
 
-## Descrição
+Esqueça códigos bonitos e padrões de projeto complexos por um momento. Aqui, o que importa é se sua API aguenta o tranco ou vai morrer?
 
-Este projeto implementa uma API REST para gerenciamento de eventos e reservas de ingressos. A aplicação garante que não haja overbooking através de operações atômicas no banco de dados, utilizando UPDATE com condições para controle de concorrência.
+O desafio é simples. Estamos vendendo **100 ingressos** para a primeira versão do rinha de dev. Milhares de devs vão tentar comprar ao mesmo tempo. E você deve vender somente os 100 ingressos, nada a mais (talvez algo a menos, mas pelo amor de deus nada a mais)
 
-## Tecnologias Utilizadas
+## O Desafio: Concorrência Real
 
-- **Node.js** - Runtime JavaScript
-- **Express.js** - Framework web
-- **PostgreSQL** - Banco de dados
-- **Neon** - PostgreSQL como serviço
-- **pg** - Cliente PostgreSQL para Node.js
-- **dotenv** - Gerenciamento de variáveis de ambiente
+Você deve construir uma API para gerenciar a reserva desses 100 ingressos.
 
-## Pré-requisitos
+**A Regra de Ouro:** não pode haver overbooking. Se você vender 101 ingressos, você está fora. Se dois usuários tentarem pegar o último ingresso no mesmo milissegundo, apenas um pode vencer.
 
-- Node.js 18+
-- PostgreSQL (ou Neon)
-- npm ou yarn
+## Endpoints Obrigatórios
 
-## Como Rodar Localmente
+Sua API precisa expor:
 
-1. Clone o repositório:
+### 1. Listar Ingressos
 
-   ```bash
-   git clone <url-do-repositorio>
-   cd rinha-ingressos
-   ```
+`GET /eventos`
 
-2. Instale as dependências:
+**Resposta (`200 OK`):**
 
-   ```bash
-   npm install
-   ```
-
-3. Configure o arquivo `.env`:
-
-   ```env
-   DATABASE_URL=postgresql://usuario:senha@host:porta/database?sslmode=require
-   PORT=8080
-   ```
-
-4. Execute a aplicação:
-   ```bash
-   npm start
-   ```
-
-A aplicação estará rodando em `http://localhost:8080`.
-
-## Como Rodar com Docker
-
-1. Construa a imagem:
-
-   ```bash
-   docker build -t rinha-ingressos .
-   ```
-
-2. Execute o container:
-   ```bash
-   docker run -p 8080:8080 --env-file .env rinha-ingressos
-   ```
-
-## Estratégia de Concorrência
-
-Para evitar overbooking em cenários de alta concorrência, utilizamos operações atômicas no PostgreSQL:
-
-- **UPDATE atômico**: O UPDATE decrementa `ingressos_disponiveis` apenas se houver ingressos disponíveis (`ingressos_disponiveis > 0`)
-- **Transação**: UPDATE e INSERT são executados em uma transação para garantir consistência
-- **Pool de conexões otimizado**: Configurado com `max: 20` conexões para suportar alta carga
-
-Esta abordagem garante que apenas uma reserva seja feita por ingresso disponível, mesmo sob alta concorrência.
-
-## Endpoints da API
-
-### Eventos
-
-- `GET /eventos` - Lista todos os eventos
-  - Resposta: `[{ id, nome, ingressos_disponiveis }]`
-
-### Reservas
-
-- `POST /reservas` - Faz uma reserva de ingresso
-  - Corpo: `{ "evento_id": number, "usuario_id": number }`
-  - Respostas:
-    - 201: `{ "sucesso": true }`
-    - 400: `{ "erro": "Dados inválidos" }`
-    - 422: `{ "erro": "Ingressos esgotados" }`
-    - 500: `{ "erro": "Erro interno" }`
-
-## Configuração (.env)
-
-```env
-DATABASE_URL=postgresql://neondb_owner:senha@host/neondb?sslmode=require&channel_binding=require
-PORT=8080
+```json
+[
+  {
+    "id": 1,
+    "nome": "Show do Picos Fest",
+    "ingressos_disponiveis": 100
+  }
+]
 ```
 
-- `DATABASE_URL`: String de conexão do PostgreSQL (Neon)
-- `PORT`: Porta do servidor (padrão 8080)
+### 2. Reservar Ingresso
 
-## Como Testar
+`POST /reservas`
 
-### Com curl
+**Payload:**
 
-Listar eventos:
-
-```bash
-curl http://localhost:8080/eventos
-```
-
-Fazer reserva:
-
-```bash
-curl -X POST http://localhost:8080/reservas \
-  -H "Content-Type: application/json" \
-  -d '{"evento_id": 1, "usuario_id": 123}'
-```
-
-### Com k6 (Teste de Carga)
-
-Crie um script `test.js`:
-
-```javascript
-import http from "k6/http";
-import { check } from "k6";
-
-export let options = {
-  vus: 10,
-  duration: "30s",
-};
-
-export default function () {
-  let response = http.post(
-    "http://localhost:8080/reservas",
-    JSON.stringify({
-      evento_id: 1,
-      usuario_id: Math.floor(Math.random() * 1000),
-    }),
-    {
-      headers: { "Content-Type": "application/json" },
-    },
-  );
-
-  check(response, {
-    "status is 201 or 422": (r) => r.status === 201 || r.status === 422,
-  });
+```json
+{
+  "evento_id": 1,
+  "usuario_id": 123
 }
 ```
 
-Execute:
+**Respostas:**
 
-```bash
-k6 run test.js
-```
+- `201 Created`: Reserva garantida!
+- `422 Unprocessable Entity`: Acabou o estoque.
+- `400 Bad Request`: Você mandou algo errado.
 
-## Estrutura do Projeto
+## O Ringue (Restrições)
 
-```
-rinha-ingressos/
-├── src/
-│   ├── controllers/
-│   │   └── reservasController.js
-│   ├── routes/
-│   │   ├── eventos.js
-│   │   └── reservas.js
-│   ├── db.js
-│   ├── env.js
-│   └── server.js
-├── Dockerfile
-├── .dockerignore
-├── package.json
-├── .env
-└── README.md
-```
+Eu não tenho um servidor da NASA. O hardware é curto para ver quem sabe otimizar de verdade:
 
-## Otimizações para Performance
+- **CPU:** `0.5`.
+- **RAM:** `256 MB`.
+- **Stack:** 1 instância da sua API + 1 Banco de Dados (Postgres).
 
-- Pool de conexões otimizado para alta concorrência
-- Operações atômicas no banco para evitar race conditions
-- Middleware mínimo no Express
-- Headers keep-alive para reduzir latência
-- Sem logs em produção para reduzir I/O
+## O que você precisa entregar?
 
-## Licença
+Para entrar na arena, abra uma nova issue no repositório e cole o link do seu vendedor de ingressos, prazo limite de entrega 27 de fevereiro, seu repo deve ter:
 
-Este projeto é parte do desafio Rinha de Dev.
+- **O Código:** na linguagem que você domina (ou naquela que você diz que sabe no LinkedIn kkkk).
+- **Dockerfile:** sua aplicação deve subir e ouvir na porta `8080`.
+- **Database:** use o arquivo `init.sql` e o `docker-compose.yml` disponibilizados na raiz deste repo. Não mude as tabelas. O juiz (script de teste) precisa encontrar os dados onde eles deveriam estar.
+
+
+## Ainn, mas eu não tenho Docker e nem sei usar...
+Você não precisa ter o Docker instalado nessa sua carroça para participar. Quem vai rodar o código via Docker sou eu, mas você ainda precisa gerar o Dockerfile (qualquer IA decente faz isso) e garantir que ele esta rodando na porta 8080, e você testa sua aplicação rodando sem Docker.
+
+## Como será o Massacre
+
+Será utilizado o **k6** (ferramenta de stress test). O fluxo é:
+
+- O script vai simular centenas de usuários simultâneos "esmurrando" o endpoint de reserva.
+- Vamos medir quantas reservas você conseguiu fazer antes do estoque zerar.
+- Vamos ver quantas vezes sua API caiu ou deu erro de timeout.
+
+## Critérios do Ranking
+
+- **Resiliência:** zero ingressos vendidos acima do limite.
+- **Throughput:** quantas requisições por segundo (RPS) sua API aguentou.
+- **Latência:** quão rápido você respondeu enquanto o mundo pegava fogo.
+
+## Dicas de Sobrevivência
+
+- **Cuidado com o lock:** se travar o banco demais, a fila cresce e o sistema para. Se não travar, você vende ingresso duplicado. Ache o equilíbrio.
+- **Pool de conexões:** não abra uma conexão nova por requisição ou sua memória vai pro espaço em 2 segundos.
+- **Logs:** desative o modo debug. O tempo que sua API gasta escrevendo "Recebi um request" no console é o tempo que ela poderia estar salvando um ingresso no banco.
+
+Dúvidas? Chame o organizador ou abra uma Issue.
+
+Prepare seu Docker, otimize seu código e que vença o mais rápido (ou quem não vender mais do que deveria né)!
